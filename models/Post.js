@@ -11,43 +11,55 @@ const postSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  location: {
+  location: String,
+  category: String,
+
+  image: String,
+  resourceType: {
     type: String,
-    // required: true,
-  },
-  category: {
-    type: String,
-    // enum: ['भ्रष्टाचार', 'पानी', 'सड़क', 'अवैध निर्माण', 'BMC', 'अन्य'],
-    // default: 'अन्य',
+    enum: ['image', 'video'],
+    default: 'image'
   },
 
-  image: {
-    type: String,
-  },
-  resourceType: {
-  type: String,
-  enum: ['image', 'video'],
-  default: 'image'
-},
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
   },
+
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
     default: 'pending',
   },
+
+  // नया फील्ड: किस एडमिन ने अप्रूव किया
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
+
+  approvedAt: {
+    type: Date,
+    default: null,
+  },
+
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   }],
+
 }, { timestamps: true });
 
-// Virtual for formatted date
+// Virtuals });
+
 postSchema.virtual('formattedDate').get(function () {
-  return this.createdAt.toLocaleDateString('hi-IN');
+  return this.createdAt.toLocaleDateString('hi-IN', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
 });
 
 export default mongoose.model('Post', postSchema);

@@ -5,6 +5,7 @@ import cors from 'cors';
 import connectDB from './config/db.js';
 import authRoutes from './routes/auth.js';
 import postRoutes from './routes/posts.js';
+import epaperRoutes from './routes/epaper.js'
 // import path from 'path';
 // import { fileURLToPath } from 'url';
 
@@ -24,6 +25,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
+app.use('/api/epaper', epaperRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'मुंबई प्लस API चल रहा है!' });
@@ -33,3 +35,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+export default app;
+

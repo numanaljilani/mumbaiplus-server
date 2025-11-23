@@ -55,4 +55,17 @@ const uploadToCloudinary = (buffer, originalName) => {
   });
 };
 
+export const generateThumbnail = (pdfUrl) => {
+  return cloudinary.url(pdfUrl, {
+    resource_type: 'raw',
+    format: 'jpg',
+    page: 1,
+    width: 600,
+    height: 849,
+    crop: 'fill',
+    quality: 'auto',
+    fetch_format: 'auto',
+  });
+};
+
 export { upload, uploadToCloudinary };
