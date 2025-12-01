@@ -4,6 +4,7 @@ import { uploadToCloudinary } from '../utils/upload.js';
 
 // 1. Create Post (User)
 export const createPost = async (req, res) => {
+  console.log(req.body , "req")
   const { heading, description, location, category } = req.body;
 
   try {
@@ -59,6 +60,29 @@ export const getPosts = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+export const breackingNews = async (req, res) => {
+console.log("inside breaking post")
+  const limit = 10;
+  const skip = 0
+
+  const filter = { status: 'approved' }; // सिर्फ अप्रूव्ड दिखें
+
+  try {
+  
+    const posts = await Post.find()
+      // .populate('userId', 'name mobile')
+      // .sort({ createdAt: -1 })
+      // .skip(skip)
+      // .limit(limit);
+console.log(posts)
+    res.json({
+      posts,
+     
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 // 3. Get Single Post
 export const getPost = async (req, res) => {
@@ -100,13 +124,16 @@ export const updatePost = async (req, res) => {
 
 // 5. Delete Post (User/Admin)
 export const deletePost = async (req, res) => {
+  console.log("Inside delete post")
   try {
     const post = await Post.findById(req.params.id);
+    console.log(post)
     if (!post) return res.status(404).json({ message: 'पोस्ट नहीं मिली' });
+    console.log(post.userId)
 
-    if (post.userId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'अनुमति नहीं' });
-    }
+    // if (post.userId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    //   return res.status(403).json({ message: 'अनुमति नहीं' });
+    // }
 
     await Post.findByIdAndDelete(req.params.id);
     res.json({ message: 'पोस्ट हटा दी गई' });

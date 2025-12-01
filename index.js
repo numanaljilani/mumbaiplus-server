@@ -6,6 +6,7 @@ import connectDB from './config/db.js';
 import authRoutes from './routes/auth.js';
 import postRoutes from './routes/posts.js';
 import epaperRoutes from './routes/epaper.js'
+import reportersRoutes from './routes/reporters.js'
 // import path from 'path';
 // import { fileURLToPath } from 'url';
 
@@ -26,6 +27,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/epaper', epaperRoutes);
+app.use('/api/reporters', reportersRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'मुंबई प्लस API चल रहा है!' });

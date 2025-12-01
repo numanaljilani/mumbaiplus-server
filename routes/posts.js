@@ -15,16 +15,21 @@ import {
   rejectPost,
   adminUpdatePost,
   adminDeletePost,
+  breackingNews,
 } from '../controllers/postController.js';
 import { protect, admin } from '../middleware/auth.js';
 import { upload } from '../utils/upload.js';
 
 const router = express.Router();
 
+
+  router.get("/breaking" , breackingNews)
 // Public & User Routes
 router.route('/')
   .post(protect, upload.single('image'), createPost)
   .get(getPosts); // सिर्फ approved पोस्ट्स दिखेंगी
+
+
 
 
 
@@ -43,6 +48,6 @@ router.delete('/admin/:id', protect, admin, adminDeletePost);         // एड�
 router.route('/:id')
   .get(getPost)
   .put(protect, upload.single('image'), updatePost)
-  .delete(protect, deletePost);
+  .delete( deletePost);
 router.post('/:id/like', protect, likePost);
 export default router;

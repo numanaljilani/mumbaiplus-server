@@ -17,14 +17,18 @@ const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
+  limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|mp4|mov|avi|webm/;
+    const allowedTypes = /jpeg|jpg|png|gif|mp4|mov|avi|webm|pdf/;
+
     const ext = file.originalname.toLowerCase().split('.').pop();
-    const isValid = allowedTypes.test(ext) && allowedTypes.test(file.mimetype);
+    const mimetype = file.mimetype.toLowerCase();
+
+    const isValid = allowedTypes.test(ext) || mimetype === "application/pdf";
 
     if (isValid) return cb(null, true);
-    cb(new Error('केवल JPG, PNG, GIF, MP4, MOV, AVI, WEBM फाइलें'));
+
+    cb(new Error('केवल JPG, PNG, GIF, MP4, MOV, AVI, WEBM और PDF फाइलें अनुमति हैं'));
   },
 });
 
