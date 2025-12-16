@@ -40,7 +40,7 @@ router.get('/my-posts', protect, getMyPosts);
 
 // Admin Only Routes
 router.get('/admin/all', getAllPostsAdmin);           // सभी पोस्ट्स (पेंडिंग + अप्रूव्ड)
-router.patch('/admin/:id/approve', protect, admin, approvePost);      // अप्रूव
+router.patch('/admin/:id/approve', protect, approvePost);      // अप्रूव
 router.patch('/admin/:id/reject', protect, admin, rejectPost);        // रिजेक्ट
 router.put('/admin/:id', protect, admin, upload.single('image'), adminUpdatePost); // एडमिन एडिट
 router.delete('/admin/:id', protect, admin, adminDeletePost);         // एडमिन डिलीट

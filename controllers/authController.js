@@ -12,7 +12,7 @@ const generateToken = (id) => {
 
 // @desc    Register user
 export const register = async (req, res) => {
-  console.log(req.body)
+
   const { name, mobile, password , email } = req.body;
 
   try {

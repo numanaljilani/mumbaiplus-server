@@ -5,7 +5,7 @@ import { v2 as cloudinary } from 'cloudinary';
 // CREATE - Upload E-Paper
 export const createEPaper = async (req, res) => {
   try {
-    console.log(req.body, "req.body");
+
     const { date } = req.body;
     const pdfFile = req.file;
 
@@ -69,7 +69,7 @@ export const createEPaper = async (req, res) => {
 
 // GET ALL - List with Pagination
 export const getEPapers = async (req, res) => {
-  console.log("iside get papers ")
+
   try {
     const page = Number(req.query.page) || 1;
     const limit = 12;
@@ -80,7 +80,7 @@ export const getEPapers = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .select('date thumbnailUrl formattedDate');
-      console.log(epapers)
+   
 
     const total = await EPaper.countDocuments({ isActive: true });
 
@@ -98,7 +98,7 @@ export const getEPaperBySpecificDate = async (req, res) => {
     // 1. Get the date from the route parameters (preferred) or query string
     const targetDate = req.params.date || req.query.date;
 
-    console.log(`Fetching E-Paper for date: ${targetDate}`);
+ 
 
     // Check if the date was provided
     if (!targetDate) {
@@ -200,7 +200,7 @@ export const deleteEPaper = async (req, res) => {
             invalidate: true // Ensure CDN cache is cleared
         });
         
-        console.log(`Cloudinary files deleted for: ${publicIdBase}`);
+        
         
         // 3. Perform the hard delete on the MongoDB document
         await EPaper.findByIdAndDelete(req.params.id);
