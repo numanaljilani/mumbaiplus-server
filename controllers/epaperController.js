@@ -1,60 +1,89 @@
 // controllers/epaperController.js
 import EPaper from '../models/EPaper.js';
-import { generateThumbnail, uploadToCloudinary } from '../utils/upload.js';
-import { v2 as cloudinary } from 'cloudinary';
+import { 
+  uploadToEpaperFiles, 
+  generateThumbnail, 
+  deleteFromS3,
+  getFileUrl 
+} from '../utils/upload.js';
+
 // CREATE - Upload E-Paper
 export const createEPaper = async (req, res) => {
   try {
-
     const { date } = req.body;
     const pdfFile = req.file;
 
     if (!date || !pdfFile) {
-      return res.status(400).json({ message: "तारीख और PDF फ़ाइल ज़रूरी है" });
+      return res.status(400).json({ 
+        success: false,
+        message: "तारीख और PDF फ़ाइल ज़रूरी है" 
+      });
+    }
+
+    // Validate file is PDF
+    const fileExt = pdfFile.originalname.split('.').pop().toLowerCase();
+    if (fileExt !== 'pdf') {
+      return res.status(400).json({
+        success: false,
+        message: "केवल PDF फाइलें स्वीकार्य हैं"
+      });
     }
 
     // Check existing date
-    const exists = await EPaper.findOne({ date: new Date(date) });
+    const parsedDate = new Date(date);
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "अमान्य तारीख फॉर्मेट"
+      });
+    }
+
+    const exists = await EPaper.findOne({ date: parsedDate });
     if (exists) {
-      return res.status(400).json({ message: "इस तारीख का ई-पेपर पहले से मौजूद है" });
+      return res.status(400).json({ 
+        success: false,
+        message: "इस तारीख का ई-पेपर पहले से मौजूद है",
+        existingEpaper: exists
+      });
     }
 
-    // ---- CLOUDINARY UPLOAD (BUFFER) ----
-    const uploadResult = await new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-    {
-        resource_type: "raw",
-        folder: "mumbaiplus/epaper",
-        public_id: `epaper_${new Date(date).toISOString().split("T")[0]}`,
-        overwrite: true,
-        format: "pdf",
-        // 🔑 FIX: Set the access mode to public so the direct URL works
-        access_mode: "public", 
-    },
-    (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
-    }
-);
+    // ---- AWS S3 UPLOAD ----
+    const uploadResult = await uploadToEpaperFiles(
+      pdfFile.buffer,
+      pdfFile.originalname,
+      pdfFile.mimetype
+    );
 
-      // Very important
-      uploadStream.end(pdfFile.buffer);
-    });
-
-    const pdfUrl = uploadResult.secure_url;
-
-    const thumbnailUrl = generateThumbnail(pdfUrl);
+    const pdfUrl = uploadResult.url;
+    const thumbnailUrl = generateThumbnail(uploadResult.key);
 
     const epaper = await EPaper.create({
-      date: new Date(date),
+      date: parsedDate,
       pdfUrl,
+      pdfKey: uploadResult.key, // Store S3 key for deletion
       thumbnailUrl,
+      fileInfo: {
+        fileName: uploadResult.fileName,
+        fileSize: pdfFile.size,
+        originalName: pdfFile.originalname,
+        mimeType: pdfFile.mimetype
+      }
+    });
+
+    // Format date for response
+    const formattedDate = epaper.date.toLocaleDateString('hi-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
     });
 
     res.status(201).json({
       success: true,
       message: "ई-पेपर सफलतापूर्वक अपलोड हो गया",
-      epaper,
+      data: {
+        ...epaper.toObject(),
+        formattedDate
+      }
     });
 
   } catch (err) {
@@ -62,156 +91,452 @@ export const createEPaper = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "ई-पेपर अपलोड करते समय त्रुटि हुई",
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
 
 // GET ALL - List with Pagination
 export const getEPapers = async (req, res) => {
-
   try {
     const page = Number(req.query.page) || 1;
-    const limit = 12;
+    const limit = Number(req.query.limit) || 12;
     const skip = (page - 1) * limit;
 
     const epapers = await EPaper.find({ isActive: true })
       .sort({ date: -1 })
       .skip(skip)
       .limit(limit)
-      .select('date thumbnailUrl formattedDate');
-   
+      .select('date thumbnailUrl pdfUrl createdAt fileInfo');
+
+    // Format dates for response
+    const formattedEpaper = epapers.map(epaper => {
+      const formattedDate = epaper.date.toLocaleDateString('hi-IN', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      
+      const simpleDate = epaper.date.toISOString().split('T')[0];
+      
+      return {
+        ...epaper.toObject(),
+        formattedDate,
+        simpleDate,
+        id: epaper._id
+      };
+    });
 
     const total = await EPaper.countDocuments({ isActive: true });
 
     res.json({
-      epapers,
-      currentPage: page,
-      totalPages: Math.ceil(total / limit),
-      total,
+      success: true,
+      data: {
+        epapers: formattedEpaper,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit),
+          totalItems: total,
+          itemsPerPage: limit,
+          hasNextPage: page < Math.ceil(total / limit),
+          hasPreviousPage: page > 1
+        }
+      }
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server Error' });
+    console.error("Get E-Papers Error:", err);
+    res.status(500).json({ 
+      success: false,
+      message: 'ई-पेपर लोड करने में त्रुटि',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
+
+// GET E-Paper by specific date
 export const getEPaperBySpecificDate = async (req, res) => {
-    // 1. Get the date from the route parameters (preferred) or query string
-    const targetDate = req.params.date || req.query.date;
+  const targetDate = req.params.date || req.query.date;
+console.log(targetDate , "targetDate")
+  if (!targetDate) {
+    return res.status(400).json({ 
+      success: false,
+      message: 'Date parameter is required.' 
+    });
+  }
 
- 
+  try {
+    console.log("Indie try ")
+   const epaper = await EPaper.findOne({
+  $expr: {
+    $eq: [
+      { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+      targetDate
+    ]
+  },
+  isActive: true 
+}).select('-__v -updatedAt');
+console.log(epaper , "epaper")
 
-    // Check if the date was provided
-    if (!targetDate) {
-        return res.status(400).json({ message: 'Date parameter is required.' });
+    if (!epaper) {
+      return res.status(404).json({ 
+        success: false,
+        message: `No active E-Paper found for date: ${targetDate}` 
+      });
     }
 
-    try {
-        // 2. Find a single document that matches the date AND is active
-        const epaper = await EPaper.findOne({
-            date: targetDate, 
-            isActive: true 
-        }).select('-__v -createdAt -updatedAt'); // Exclude unnecessary fields
+    // Format date for response
+    const formattedDate = epaper.date.toLocaleDateString('hi-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
 
-        // 3. Handle Paper Not Found
-        if (!epaper) {
-            return res.status(404).json({ 
-                message: `No active E-Paper found for date: ${targetDate}` 
-            });
-        }
+    const simpleDate = epaper.date.toISOString().split('T')[0];
+    console.log(simpleDate , "simpleDate")
 
-        // 4. Send the specific paper
-        res.status(200).json(epaper);
+    res.status(200).json({
+      success: true,
+      data: {
+        ...epaper.toObject(),
+        formattedDate,
+        simpleDate
+      }
+    });
 
-    } catch (err) {
-        console.error('Error fetching E-Paper by date:', err);
-        res.status(500).json({ message: 'Server Error during E-Paper lookup.' });
-    }
+  } catch (err) {
+    console.error('Error fetching E-Paper by date:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server Error during E-Paper lookup.',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
 };
 
-// GET ONE
+// GET ONE by ID
 export const getEPaperById = async (req, res) => {
   try {
     const epaper = await EPaper.findById(req.params.id);
+    
     if (!epaper || !epaper.isActive) {
-      return res.status(404).json({ message: 'ई-पेपर नहीं मिला' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'ई-पेपर नहीं मिला' 
+      });
     }
-    res.json(ePaper);
+
+    // Format date
+    const formattedDate = epaper.date.toLocaleDateString('hi-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...epaper.toObject(),
+        formattedDate
+      }
+    });
   } catch (err) {
-    res.status(500).json({ message: 'Server Error' });
+    console.error("Get E-Paper by ID Error:", err);
+    res.status(500).json({ 
+      success: false,
+      message: 'ई-पेपर लोड करने में त्रुटि',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
-// UPDATE - Replace PDF
+// UPDATE - Replace PDF (Admin only)
 export const updateEPaper = async (req, res) => {
   try {
-    const { pdfUrl } = req.body;
-    if (!pdfUrl) {
-      return res.status(400).json({ message: 'PDF URL जरूरी है' });
+    // Check if user is admin
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "केवल एडमिन यह कार्रवाई कर सकते हैं"
+      });
     }
 
-    const epaper = await EPaper.findById(req.params.id);
+    const { id } = req.params;
+    const { date } = req.body;
+    const pdfFile = req.file;
+
+    const epaper = await EPaper.findById(id);
     if (!epaper) {
-      return res.status(404).json({ message: 'ई-पेपर नहीं मिला' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'ई-पेपर नहीं मिला' 
+      });
     }
 
-    const thumbnailUrl = generateThumbnail(pdfUrl);
+    const updates = {};
+    
+    // Update date if provided
+    if (date) {
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "अमान्य तारीख फॉर्मेट"
+        });
+      }
+      
+      // Check if date already exists (excluding current document)
+      const dateExists = await EPaper.findOne({
+        date: parsedDate,
+        _id: { $ne: id }
+      });
+      
+      if (dateExists) {
+        return res.status(400).json({
+          success: false,
+          message: "इस तारीख का ई-पेपर पहले से मौजूद है"
+        });
+      }
+      
+      updates.date = parsedDate;
+    }
+
+    // Handle file upload if new file is provided
+    if (pdfFile) {
+      // Validate file is PDF
+      const fileExt = pdfFile.originalname.split('.').pop().toLowerCase();
+      if (fileExt !== 'pdf') {
+        return res.status(400).json({
+          success: false,
+          message: "केवल PDF फाइलें स्वीकार्य हैं"
+        });
+      }
+
+      // Delete old file from S3
+      if (epaper.pdfKey) {
+        try {
+          await deleteFromS3(epaper.pdfKey);
+          console.log(`Deleted old E-Paper from S3: ${epaper.pdfKey}`);
+        } catch (deleteError) {
+          console.error('Error deleting old E-Paper from S3:', deleteError);
+        }
+      }
+
+      // Upload new file
+      const uploadResult = await uploadToEpaperFiles(
+        pdfFile.buffer,
+        pdfFile.originalname,
+        pdfFile.mimetype
+      );
+
+      updates.pdfUrl = uploadResult.url;
+      updates.pdfKey = uploadResult.key;
+      updates.thumbnailUrl = generateThumbnail(uploadResult.key);
+      updates.fileInfo = {
+        fileName: uploadResult.fileName,
+        fileSize: pdfFile.size,
+        originalName: pdfFile.originalname,
+        mimeType: pdfFile.mimetype,
+        updatedAt: new Date()
+      };
+    }
 
     const updated = await EPaper.findByIdAndUpdate(
-      req.params.id,
-      { pdfUrl, thumbnailUrl },
+      id,
+      updates,
       { new: true }
     );
 
-    res.json(updated);
+    // Format date for response
+    const formattedDate = updated.date.toLocaleDateString('hi-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    res.json({
+      success: true,
+      message: "ई-पेपर सफलतापूर्वक अपडेट हुआ",
+      data: {
+        ...updated.toObject(),
+        formattedDate
+      }
+    });
   } catch (err) {
-    res.status(500).json({ message: 'Server Error' });
+    console.error("Update E-Paper Error:", err);
+    res.status(500).json({ 
+      success: false,
+      message: 'ई-पेपर अपडेट करने में त्रुटि',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
-// DELETE - Soft Delete
-export const deleteEPaper = async (req, res) => {
-    try {
-        // 1. Find the document to get the necessary data (like 'date')
-        const epaper = await EPaper.findById(req.params.id);
-        
-        if (!epaper) {
-            return res.status(404).json({ message: 'ई-पेपर नहीं मिला' });
-        }
-
-        // Get the date string in YYYY-MM-DD format
-        const targetDate = epaper.date; 
-
-        // 2. Construct the Cloudinary Public IDs
-        // Based on your upload structure: 'mumbaiplus/epaper/epaper_YYYY-MM-DD'
-        const publicIdBase = `mumbaiplus/epaper/epaper_${targetDate}`;
-        
-        // --- Cloudinary Deletion Steps ---
-
-        // A. Delete the PDF file (resource_type: "raw")
-        await cloudinary.uploader.destroy(publicIdBase, {
-            resource_type: 'raw',
-            invalidate: true // Ensure CDN cache is cleared
-        });
-        
-        // B. Delete the Thumbnail Image (resource_type: "image")
-        // If you don't use thumbnails, this will safely attempt deletion and proceed.
-        await cloudinary.uploader.destroy(publicIdBase, {
-            resource_type: 'image',
-            invalidate: true // Ensure CDN cache is cleared
-        });
-        
-        
-        
-        // 3. Perform the hard delete on the MongoDB document
-        await EPaper.findByIdAndDelete(req.params.id);
-
-        res.json({ message: 'ई-पेपर और संबंधित फाइलें सफलतापूर्वक हटा दी गईं' });
-
-    } catch (err) {
-        console.error('Error during E-Paper deletion:', err);
-        // Respond with an error message, potentially clarifying the Cloudinary failure
-        res.status(500).json({ 
-            message: 'Server Error: डेटाबेस या क्लाउडिनरी से हटाने में विफल रहा' 
-        });
+// SOFT DELETE - Set isActive to false
+export const softDeleteEPaper = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "केवल एडमिन यह कार्रवाई कर सकते हैं"
+      });
     }
+
+    const epaper = await EPaper.findById(req.params.id);
+    
+    if (!epaper) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'ई-पेपर नहीं मिला' 
+      });
+    }
+
+    const deleted = await EPaper.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false, deletedAt: new Date() },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: "ई-पेपर सफलतापूर्वक डिलीट हुआ",
+      data: deleted
+    });
+  } catch (err) {
+    console.error("Soft Delete E-Paper Error:", err);
+    res.status(500).json({ 
+      success: false,
+      message: 'ई-पेपर डिलीट करने में त्रुटि',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+// HARD DELETE - Delete from DB and S3
+export const deleteEPaper = async (req, res) => {
+  try {
+    console.log(req.user)
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "केवल एडमिन यह कार्रवाई कर सकते हैं"
+      });
+    }
+
+    const epaper = await EPaper.findById(req.params.id);
+    
+    if (!epaper) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'ई-पेपर नहीं मिला' 
+      });
+    }
+
+    // Delete from S3
+    if (epaper.pdfKey) {
+      try {
+        await deleteFromS3(epaper.pdfKey);
+        console.log(`Deleted E-Paper from S3: ${epaper.pdfKey}`);
+      } catch (deleteError) {
+        console.error('Error deleting E-Paper from S3:', deleteError);
+        return res.status(500).json({
+          success: false,
+          message: "S3 से फाइल डिलीट करने में त्रुटि",
+          error: process.env.NODE_ENV === 'development' ? deleteError.message : undefined
+        });
+      }
+    }
+
+    // Delete from database
+    await EPaper.findByIdAndDelete(req.params.id);
+
+    res.json({
+      success: true,
+      message: 'ई-पेपर और संबंधित फाइलें सफलतापूर्वक हटा दी गईं'
+    });
+
+  } catch (err) {
+    console.error('Error during E-Paper deletion:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server Error: डेटाबेस या S3 से हटाने में विफल रहा',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+// RESTORE soft deleted E-Paper
+export const restoreEPaper = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "केवल एडमिन यह कार्रवाई कर सकते हैं"
+      });
+    }
+
+    const epaper = await EPaper.findById(req.params.id);
+    
+    if (!epaper) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'ई-पेपर नहीं मिला' 
+      });
+    }
+
+    const restored = await EPaper.findByIdAndUpdate(
+      req.params.id,
+      { isActive: true, deletedAt: null },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: "ई-पेपर सफलतापूर्वक रिस्टोर हुआ",
+      data: restored
+    });
+  } catch (err) {
+    console.error("Restore E-Paper Error:", err);
+    res.status(500).json({ 
+      success: false,
+      message: 'ई-पेपर रिस्टोर करने में त्रुटि',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+// GET latest E-Paper
+export const getLatestEPaper = async (req, res) => {
+  try {
+    const latestEpaper = await EPaper.findOne({ isActive: true })
+      .sort({ date: -1 })
+      .select('date pdfUrl thumbnailUrl');
+
+    if (!latestEpaper) {
+      return res.status(404).json({
+        success: false,
+        message: "कोई ई-पेपर उपलब्ध नहीं है"
+      });
+    }
+
+    const formattedDate = latestEpaper.date.toLocaleDateString('hi-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...latestEpaper.toObject(),
+        formattedDate
+      }
+    });
+  } catch (err) {
+    console.error("Get Latest E-Paper Error:", err);
+    res.status(500).json({
+      success: false,
+      message: 'सबसे नवीन ई-पेपर लोड करने में त्रुटि',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
 };

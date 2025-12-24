@@ -1,40 +1,69 @@
 // models/EPaper.js
 import mongoose from 'mongoose';
 
-const ePaperSchema = new mongoose.Schema(
-  {
-    date: {
-      type: Date,
-      required: true,
-      unique: true,
-    },
-    pdfUrl: {
-      type: String,
-      required: true,
-    },
-    thumbnailUrl: {
-      type: String,
-      required: true,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
+const epaperSchema = new mongoose.Schema({
+  date: {
+    type: Date,
+    required: true,
+    unique: true,
+    index: true
   },
-  {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+  pdfUrl: {
+    type: String,
+    required: true
+  },
+  pdfKey: {
+    type: String,
+    required: true,
+    index: true
+  },
+  thumbnailUrl: {
+    type: String
+  },
+  fileInfo: {
+    fileName: String,
+    fileSize: Number,
+    originalName: String,
+    mimeType: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    },
+    updatedAt: Date
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  deletedAt: {
+    type: Date
+  },
+  uploadedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }
-);
+}, { 
+  timestamps: true 
+});
 
-// Virtual: Hindi formatted date
-ePaperSchema.virtual('formattedDate').get(function () {
+// Virtual for formatted date
+epaperSchema.virtual('formattedDate').get(function() {
   return this.date.toLocaleDateString('hi-IN', {
     day: 'numeric',
     month: 'long',
-    year: 'numeric',
+    year: 'numeric'
   });
 });
 
-export default mongoose.models.EPaper || mongoose.model('EPaper', ePaperSchema);
+// Virtual for simple date (YYYY-MM-DD)
+epaperSchema.virtual('simpleDate').get(function() {
+  return this.date.toISOString().split('T')[0];
+});
+
+// Indexes for better query performance
+epaperSchema.index({ date: -1, isActive: 1 });
+epaperSchema.index({ isActive: 1, createdAt: -1 });
+
+const EPaper = mongoose.model('EPaper', epaperSchema);
+
+export default EPaper;

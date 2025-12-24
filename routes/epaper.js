@@ -9,6 +9,7 @@ import {
   getEPaperBySpecificDate,
 } from '../controllers/epaperController.js';
 import { upload } from '../utils/upload.js';
+import { protect } from '../middleware/auth.js';
 
 
 const router = express.Router();
@@ -21,6 +22,6 @@ router.get('/:id', getEPaperById);
 // Admin Only Routes
 router.post('/',upload.single("pdfFile"), createEPaper);
 router.put('/:id', updateEPaper);
-router.delete('/:id', deleteEPaper);
+router.delete('/:id',protect, deleteEPaper);
 
 export default router;

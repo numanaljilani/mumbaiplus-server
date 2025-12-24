@@ -29,12 +29,6 @@ router.route('/')
   .post(protect, upload.single('image'), createPost)
   .get(getPosts); // सिर्फ approved पोस्ट्स दिखेंगी
 
-
-
-
-
-
-
 // User: अपनी पोस्ट्स देखें
 router.get('/my-posts', protect, getMyPosts);
 
