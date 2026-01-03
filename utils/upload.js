@@ -13,7 +13,7 @@ const s3 = new AWS.S3({
   region: process.env.AWS_REGION || 'ap-south-1',
 });
 
-const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'mumbaiplus';
+const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'mumbai-plus';
 
 // Multer: सिर्फ़ मेमोरी में रखें — कोई डिस्क फाइल नहीं बनेगी
 const storage = multer.memoryStorage();
