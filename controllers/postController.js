@@ -146,6 +146,7 @@ export const getPost = async (req, res) => {
 // 4. Update Post (User या Admin)
 export const updatePost = async (req, res) => {
   try {
+console.log(req.body.data , "DATA")
     const post = await Post.findById(req.params.id);
     if (!post) {
       return res.status(404).json({ 
@@ -165,7 +166,7 @@ export const updatePost = async (req, res) => {
       });
     }
 
-    const updates = req.body;
+    const updates = req.body?.data;
     let newThumbnailUrl = post.thumbnail;
 
     // Handle file upload if new file is provided
@@ -244,8 +245,10 @@ export const updatePost = async (req, res) => {
     const updateFields = {};
     
     // Only update fields that are provided in request
-    if (updates.heading !== undefined) updateFields.heading = updates.heading;
-    if (updates.description !== undefined) updateFields.description = updates.description;
+
+    // console.log(updates, "HEADING")
+    if (updates?.title) updateFields.heading = updates?.title;
+    if (updates.content !== undefined) updateFields.description = updates.content;
     if (updates.location !== undefined) updateFields.location = updates.location;
     if (updates.category !== undefined) updateFields.category = updates.category;
     if (updates.status !== undefined && req.user.role === "admin") {
@@ -258,7 +261,7 @@ export const updatePost = async (req, res) => {
     if (updates.resourceType !== undefined) updateFields.resourceType = updates.resourceType;
     if (updates.thumbnail !== undefined) updateFields.thumbnail = updates.thumbnail;
     if (updates.metadata !== undefined) updateFields.metadata = updates.metadata;
-
+console.log(updateFields , "NEW ")
     const updatedPost = await Post.findByIdAndUpdate(
       req.params.id, 
       updateFields, 
